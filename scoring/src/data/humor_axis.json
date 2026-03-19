@@ -1,0 +1,12 @@
+{
+  "coefficients": {
+    "coreNoteFactor1": 0.06431456239183518,
+    "internalNoteFactor2": -0.5914456000308792,
+    "internalNoteFactor3": 0.1522142099787338,
+    "internalNoteFactor4": 0.2585737843414387,
+    "internalNoteFactor5": 0.6033152016463783,
+    "internalNoteFactor6": 0.43822019472263807
+  },
+  "auc": 0.7582097933513028,
+  "interpretation": "+0.60*F5 - 0.59*F2 + 0.44*F6"
+}

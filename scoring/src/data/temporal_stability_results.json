@@ -1,0 +1,22 @@
+{
+  "n_splits": 3,
+  "n_common_users": 32829,
+  "polarization_axes_found": [
+    0,
+    3,
+    0
+  ],
+  "temporal_stability": {
+    "description": "Correlation of users on their respective polarization axes across time periods",
+    "mean": 0.004167867073974533,
+    "min": 0.00015165789350615362,
+    "max": 0.007099353043440642,
+    "all_correlations": [
+      0.005252590284976802,
+      0.00015165789350615362,
+      0.007099353043440642
+    ]
+  },
+  "pass_threshold": 0.5,
+  "pass": false
+}

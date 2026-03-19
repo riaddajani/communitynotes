@@ -174,6 +174,13 @@ def parse_args():
     dest="sample_ratings",
     help="Set to sample ratings at random.",
   )
+  parser.add_argument(
+    "--include-notes",
+    default=None,
+    type=str,
+    dest="include_notes",
+    help="Comma-separated list of noteIds to always include when sampling.",
+  )
   return parser.parse_args()
 
 
@@ -224,8 +231,22 @@ def _run_scorer(
   # Sample ratings to decrease runtime
   if args.sample_ratings:
     origSize = len(ratings)
-    ratings = ratings.sample(frac=args.sample_ratings)
-    logger.info(f"ratings reduced from {origSize} to {len(ratings)}")
+    # Parse include_notes if provided
+    include_note_ids = set()
+    if args.include_notes:
+      include_note_ids = set(int(x.strip()) for x in args.include_notes.split(',') if x.strip())
+      logger.info(f"Will always include ratings for {len(include_note_ids)} specified notes")
+
+    if include_note_ids:
+      # Always include ratings for specified notes
+      must_include = ratings[ratings['noteId'].isin(include_note_ids)]
+      other_ratings = ratings[~ratings['noteId'].isin(include_note_ids)]
+      sampled_other = other_ratings.sample(frac=args.sample_ratings)
+      ratings = pd.concat([must_include, sampled_other])
+      logger.info(f"ratings reduced from {origSize} to {len(ratings)} (including {len(must_include)} for specified notes)")
+    else:
+      ratings = ratings.sample(frac=args.sample_ratings)
+      logger.info(f"ratings reduced from {origSize} to {len(ratings)}")
 
   # Invoke scoring and user contribution algorithms.
   scoredNotes, helpfulnessScores, newStatus, auxNoteInfo = run_scoring(

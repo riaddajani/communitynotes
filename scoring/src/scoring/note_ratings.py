@@ -685,7 +685,14 @@ def compute_scored_notes(
   )
 
   # Merge with noteParams as necessary
-  noteParamsColsToKeep = [c.noteIdKey, c.internalNoteInterceptKey, c.internalNoteFactor1Key]
+  # Include all note factor columns that exist (Factor1, Factor2, etc.)
+  noteParamsColsToKeep = [c.noteIdKey, c.internalNoteInterceptKey]
+  for i in range(1, 10):  # Support up to 10 factors
+    factor_key = c.note_factor_key(i)
+    if factor_key in noteParams.columns:
+      noteParamsColsToKeep.append(factor_key)
+    else:
+      break  # Stop when we reach a factor that doesn't exist
   if finalRound:
     noteParamsColsToKeep += [c.lowDiligenceNoteInterceptKey]
   for col in c.noteParameterUncertaintyTSVColumns:

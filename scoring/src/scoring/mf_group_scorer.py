@@ -222,7 +222,9 @@ class MFGroupScorer(MFBaseScorer):
 
   def _get_dropped_note_cols(self) -> List[str]:
     """Returns a list of columns which should be excluded from scoredNotes and auxiliaryNoteInfo."""
-    return super()._get_dropped_note_cols() + (
+    # Drop extra note factor columns (Factor2+) since this scorer only outputs Factor1
+    extra_note_factors = [c.note_factor_key(i) for i in range(2, self._get_num_factors() + 1)]
+    return super()._get_dropped_note_cols() + extra_note_factors + (
       [
         c.activeFilterTagsKey,
         c.ratingWeightKey,
@@ -237,7 +239,9 @@ class MFGroupScorer(MFBaseScorer):
 
   def _get_dropped_user_cols(self) -> List[str]:
     """Returns a list of columns which should be excluded from helpfulnessScores output."""
-    return super()._get_dropped_user_cols() + [
+    # Drop extra factor columns (Factor2+) since this scorer only outputs Factor1
+    extra_factors = [c.rater_factor_key(i) for i in range(2, self._get_num_factors() + 1)]
+    return super()._get_dropped_user_cols() + extra_factors + [
       c.crhCrnhRatioDifferenceKey,
       c.meanNoteScoreKey,
       c.raterAgreeRatioKey,

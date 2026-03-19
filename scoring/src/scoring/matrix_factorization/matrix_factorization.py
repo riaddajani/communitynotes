@@ -6,6 +6,7 @@ from typing import List, Optional, Tuple
 from .. import constants as c
 from .model import BiasedMatrixFactorization, ModelData
 from .normalized_loss import NormalizedLoss
+from .sigreg_loss import SIGRegLoss
 from .wandb_utils import wandb
 
 import numpy as np
@@ -29,7 +30,7 @@ class MatrixFactorization:
     initLearningRate=0.2,
     noInitLearningRate=1.0,
     convergence=1e-7,
-    numFactors=1,
+    numFactors=c.defaultNumFactors,
     useGlobalIntercept=True,
     log=True,
     model: Optional[BiasedMatrixFactorization] = None,
@@ -45,6 +46,10 @@ class MatrixFactorization:
     diamondLambda=0,
     normalizedLossHyperparameters=None,
     seed: Optional[int] = None,
+    useSIGReg=True,
+    sigregLambdaUser=0.01,
+    sigregLambdaNote=0.01,
+    sigregNormalize=True,
   ) -> None:
     """Configure matrix factorization note ranking."""
     self._initLearningRate = initLearningRate
@@ -66,6 +71,23 @@ class MatrixFactorization:
     self._normalizedLossHyperparameters = normalizedLossHyperparameters
     self._lossModule: Optional[NormalizedLoss] = None
     self._seed = seed
+    self._useSIGReg = useSIGReg
+    self._sigregLambdaUser = sigregLambdaUser
+    self._sigregLambdaNote = sigregLambdaNote
+
+    # Initialize SIGReg modules if enabled
+    if self._useSIGReg:
+      self._sigreg_user = SIGRegLoss(
+        lambda_sketch=sigregLambdaUser,
+        normalize=sigregNormalize
+      )
+      self._sigreg_note = SIGRegLoss(
+        lambda_sketch=sigregLambdaNote,
+        normalize=sigregNormalize
+      )
+    else:
+      self._sigreg_user = None
+      self._sigreg_note = None
 
     if self._useSigmoidCrossEntropy:
       if self._posWeight:
@@ -113,6 +135,9 @@ class MatrixFactorization:
       userInterceptLambda=self._userInterceptLambda,
       noteInterceptLambda=self._noteInterceptLambda,
       globalInterceptLambda=self._globalInterceptLambda,
+      useSIGReg=self._useSIGReg,
+      sigregLambdaUser=self._sigregLambdaUser,
+      sigregLambdaNote=self._sigregLambdaNote,
     )
 
   def _initialize_note_and_rater_id_maps(
@@ -190,17 +215,29 @@ class MatrixFactorization:
         unsafeAllowed={c.noteIdKey, "noteIndex_y"},
       )
 
-      noteInit[c.internalNoteInterceptKey].fillna(0.0, inplace=True)
+      noteInit[c.internalNoteInterceptKey] = noteInit[c.internalNoteInterceptKey].fillna(0.0)
       self.mf_model.note_intercepts.weight.data = torch.tensor(
         np.expand_dims(noteInit[c.internalNoteInterceptKey].astype(np.float32).values, axis=1)
       )
 
+      # Handle initialization with potentially missing factors
+      # This supports both single-factor initialization and multi-factor initialization
+      factor_data = []
       for i in range(1, self._numFactors + 1):
-        noteInit[c.note_factor_key(i)].fillna(0.0, inplace=True)
+        factor_key = c.note_factor_key(i)
+        if factor_key in noteInit.columns:
+          # Use existing factor data
+          noteInit[factor_key] = noteInit[factor_key].fillna(0.0)
+          factor_data.append(noteInit[factor_key].values)
+        else:
+          # Initialize missing factors with small random values
+          # This maintains diversity between factors while being close to zero
+          factor_values = np.random.normal(0, 0.01, size=len(noteInit))
+          noteInit[factor_key] = factor_values
+          factor_data.append(factor_values)
+
       self.mf_model.note_factors.weight.data = torch.tensor(
-        noteInit[[c.note_factor_key(i) for i in range(1, self._numFactors + 1)]]
-        .astype(np.float32)
-        .values
+        np.column_stack(factor_data).astype(np.float32)
       )
 
     if userInit is not None:
@@ -213,12 +250,21 @@ class MatrixFactorization:
         np.expand_dims(userInit[c.internalRaterInterceptKey].astype(np.float32).values, axis=1)
       )
 
+      # Handle initialization with potentially missing factors (same as for notes)
+      factor_data = []
       for i in range(1, self._numFactors + 1):
-        userInit[c.rater_factor_key(i)] = userInit[c.rater_factor_key(i)].fillna(0.0)
+        factor_key = c.rater_factor_key(i)
+        if factor_key in userInit.columns:
+          userInit[factor_key] = userInit[factor_key].fillna(0.0)
+          factor_data.append(userInit[factor_key].values)
+        else:
+          # Initialize missing factors with small random values
+          factor_values = np.random.normal(0, 0.01, size=len(userInit))
+          userInit[factor_key] = factor_values
+          factor_data.append(factor_values)
+
       self.mf_model.user_factors.weight.data = torch.tensor(
-        userInit[[c.rater_factor_key(i) for i in range(1, self._numFactors + 1)]]
-        .astype(np.float32)
-        .values
+        np.column_stack(factor_data).astype(np.float32)
       )
 
     if globalInterceptInit is not None:
@@ -338,6 +384,28 @@ class MatrixFactorization:
         logger.info(f"VALIDATE FIT LOSS: {validate_loss_value}")
 
     wandb.log(metrics, step=epoch, commit=False)
+
+    # Log SIGReg statistics if enabled
+    if self._useSIGReg and self._sigreg_user is not None:
+      if self.mf_model.user_factors.weight.shape[1] > 1:
+        user_stats = self._sigreg_user.get_covariance_stats(self.mf_model.user_factors.weight)
+        wandb.log({
+          f"{run_name}SIGReg/user_eigenvalue_std": user_stats['eigenvalue_std'],
+          f"{run_name}SIGReg/user_isotropy": self._sigreg_user.compute_isotropy_score(
+            self.mf_model.user_factors.weight
+          ),
+          f"{run_name}SIGReg/user_condition_number": user_stats['condition_number']
+        }, step=epoch, commit=False)
+
+      if self.mf_model.note_factors.weight.shape[1] > 1:
+        note_stats = self._sigreg_note.get_covariance_stats(self.mf_model.note_factors.weight)
+        wandb.log({
+          f"{run_name}SIGReg/note_eigenvalue_std": note_stats['eigenvalue_std'],
+          f"{run_name}SIGReg/note_isotropy": self._sigreg_note.compute_isotropy_score(
+            self.mf_model.note_factors.weight
+          ),
+          f"{run_name}SIGReg/note_condition_number": note_stats['condition_number']
+        }, step=epoch, commit=False)
 
     if final == True:
       self.test_errors.append(loss_value)
@@ -467,6 +535,23 @@ class MatrixFactorization:
 
     l2_reg_loss += self._globalInterceptLambda * (self.mf_model.global_intercept**2).mean()
 
+    # Add SIGReg loss if enabled (only for multi-dimensional embeddings)
+    if self._useSIGReg and self._sigreg_user is not None:
+      # Only apply SIGReg when embedding dimension > 1
+      if self.mf_model.user_factors.weight.shape[1] > 1:
+        sigreg_user_loss = self._sigreg_user(self.mf_model.user_factors.weight)
+        l2_reg_loss += sigreg_user_loss
+        if not hasattr(self, '_sigreg_logged'):
+          logger.info(f"SIGReg applied: user_loss={sigreg_user_loss.item():.6f}, user_dim={self.mf_model.user_factors.weight.shape[1]}")
+          self._sigreg_logged = True
+
+      if self.mf_model.note_factors.weight.shape[1] > 1:
+        sigreg_note_loss = self._sigreg_note(self.mf_model.note_factors.weight)
+        l2_reg_loss += sigreg_note_loss
+        if not hasattr(self, '_sigreg_note_logged'):
+          logger.info(f"SIGReg applied: note_loss={sigreg_note_loss.item():.6f}, note_dim={self.mf_model.note_factors.weight.shape[1]}")
+          self._sigreg_note_logged = True
+
     return l2_reg_loss
 
   def _fit_model(
@@ -577,6 +662,31 @@ class MatrixFactorization:
           raterParams: contains one row per rating, including raterId and learned rater parameters
           globalIntercept: learned global intercept parameter
     """
+    # Guard against empty ratings to prevent ZeroDivisionError
+    if len(ratings) == 0 or ratings[c.noteIdKey].nunique() == 0:
+      logger.warning("No ratings provided to run_mf, returning empty results")
+      noteParams = pd.DataFrame(
+        {
+          c.noteIdKey: pd.array([], dtype=np.int64),
+          c.internalNoteInterceptKey: pd.array([], dtype=np.float32),
+        }
+      )
+      # Add factor columns
+      for i in range(1, self._numFactors + 1):
+        noteParams[c.note_factor_key(i)] = pd.array([], dtype=np.float32)
+
+      raterParams = pd.DataFrame(
+        {
+          c.raterParticipantIdKey: pd.array([], dtype=np.int64),
+          c.internalRaterInterceptKey: pd.array([], dtype=np.float32),
+        }
+      )
+      # Add factor columns
+      for i in range(1, self._numFactors + 1):
+        raterParams[c.rater_factor_key(i)] = pd.array([], dtype=np.float32)
+
+      return noteParams, raterParams, globalInterceptInit if globalInterceptInit is not None else 0.0
+
     if run_name:
       unique_run_id = f"{run_name}_{int(time.time())}"
       run_name += "/"

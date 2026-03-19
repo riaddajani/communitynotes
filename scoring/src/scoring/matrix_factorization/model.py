@@ -27,6 +27,8 @@ class BiasedMatrixFactorization(torch.nn.Module):
     use_global_intercept: bool = True,
     log: bool = True,
     seed: Optional[int] = None,
+    use_sigreg: bool = True,
+    sigreg_lambda: float = 0.01,
   ) -> None:
     """Initialize matrix factorization model using xavier_uniform for factors
     and zeros for intercepts.
@@ -36,10 +38,14 @@ class BiasedMatrixFactorization(torch.nn.Module):
         n_notes (int): number of notes
         n_factors (int, optional): number of dimensions. Defaults to 1. Only 1 is supported.
         use_global_intercept (bool, optional): Defaults to True.
+        use_sigreg (bool, optional): Whether to use SIGReg regularization. Defaults to False.
+        sigreg_lambda (float, optional): Weight for SIGReg loss term. Defaults to 0.01.
     """
     super().__init__()
 
     self._log = log
+    self._use_sigreg = use_sigreg
+    self._sigreg_lambda = sigreg_lambda
 
     self.user_factors = torch.nn.Embedding(n_users, n_factors, sparse=False, dtype=torch.float32)
     self.note_factors = torch.nn.Embedding(n_notes, n_factors, sparse=False, dtype=torch.float32)
@@ -98,3 +104,14 @@ class BiasedMatrixFactorization(torch.nn.Module):
           if self._log:
             logger.info(f"Freezing parameter: {name}")
           param.requires_grad_(False)
+
+  def get_factor_embeddings(self):
+    """Return factor embeddings for regularization.
+
+    Returns:
+        dict: Dictionary containing user and note factor embeddings
+    """
+    return {
+      'user_factors': self.user_factors.weight,
+      'note_factors': self.note_factors.weight
+    }

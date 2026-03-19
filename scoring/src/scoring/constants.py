@@ -18,6 +18,14 @@ logger.setLevel(logging.INFO)
 # and no value is specified.
 defaultNumThreads = os.cpu_count() or 8
 
+# SIGReg (Sketched Isotropic Gaussian Regularization) defaults
+# These constants control the regularization that prevents representation collapse
+# when using higher-dimensional embeddings in matrix factorization
+defaultNumFactors = 6  # Number of factors in matrix factorization (used for dynamic column generation)
+defaultSIGRegEnabled = True  # Disabled by default for backward compatibility
+defaultSIGRegLambdaUser = 0.01  # Regularization weight for user embeddings
+defaultSIGRegLambdaNote = 0.01  # Regularization weight for note embeddings
+
 # Store the timestamp at which the constants module is initialized.  Note
 # that module initialization occurs only once regardless of how many times
 # the module is imported (see link below).  Storing a designated timestamp
@@ -811,17 +819,22 @@ deprecatedNoteModelOutputColumns = frozenset(
   }
 )
 
-prescoringNoteModelOutputTSVColumnsAndTypes = [
-  (noteIdKey, np.int64),
-  (internalNoteInterceptKey, np.double),
-  (internalNoteFactor1Key, np.double),
-  (scorerNameKey, str),
-  (lowDiligenceNoteInterceptKey, np.double),
-  (lowDiligenceNoteFactor1Key, np.double),
-  (lowDiligenceNoteInterceptRound2Key, np.double),
-  (harassmentNoteInterceptKey, np.double),
-  (harassmentNoteFactor1Key, np.double),
-]
+prescoringNoteModelOutputTSVColumnsAndTypes = (
+  [
+    (noteIdKey, np.int64),
+    (internalNoteInterceptKey, np.double),
+    (internalNoteFactor1Key, np.double),
+  ]
+  + [(note_factor_key(i), np.double) for i in range(2, defaultNumFactors + 1)]  # SIGreg multi-factor columns
+  + [
+    (scorerNameKey, str),
+    (lowDiligenceNoteInterceptKey, np.double),
+    (lowDiligenceNoteFactor1Key, np.double),
+    (lowDiligenceNoteInterceptRound2Key, np.double),
+    (harassmentNoteInterceptKey, np.double),
+    (harassmentNoteFactor1Key, np.double),
+  ]
+)
 prescoringNoteModelOutputTSVColumns = [
   col for (col, dtype) in prescoringNoteModelOutputTSVColumnsAndTypes
 ]
@@ -829,11 +842,15 @@ prescoringNoteModelOutputTSVTypeMapping = {
   col: dtype for (col, dtype) in prescoringNoteModelOutputTSVColumnsAndTypes
 }
 
-noteModelOutputTSVColumnsAndTypes = [
-  (noteIdKey, np.int64),
-  (coreNoteInterceptKey, np.double),
-  (coreNoteFactor1Key, np.double),
-  (finalRatingStatusKey, "category"),
+noteModelOutputTSVColumnsAndTypes = (
+  [
+    (noteIdKey, np.int64),
+    (coreNoteInterceptKey, np.double),
+    (coreNoteFactor1Key, np.double),
+  ]
+  + [(note_factor_key(i), np.double) for i in range(2, defaultNumFactors + 1)]  # SIGreg multi-factor columns
+  + [
+    (finalRatingStatusKey, "category"),
   (firstTagKey, "category"),
   (secondTagKey, "category"),
   # Note that this column was formerly named "activeRules" and the name is now
@@ -922,7 +939,8 @@ noteModelOutputTSVColumnsAndTypes = [
   (gaussianNoteInterceptNoHighVolKey, np.double),
   (gaussianNoteInterceptPopulationSampledKey, np.double),
   (gaussianNumFinalRoundRatingsKey, np.double),  # double because nullable.
-]
+  ]
+)
 noteModelOutputTSVColumns = [col for (col, dtype) in noteModelOutputTSVColumnsAndTypes]
 noteModelOutputTSVTypeMapping = {col: dtype for (col, dtype) in noteModelOutputTSVColumnsAndTypes}
 deprecatedNoteModelOutputTSVColumnsAndTypes = [
@@ -934,11 +952,15 @@ deprecatedNoteModelOutputTSVColumnsAndTypes = [
 postSelectionValueKey = "postSelectionValue"
 quasiCliqueValueKey = "quasiCliqueValue"
 
-prescoringRaterModelOutputTSVColumnsAndTypes = [
-  (raterParticipantIdKey, object),
-  (internalRaterInterceptKey, np.double),
-  (internalRaterFactor1Key, np.double),
-  (internalFirstRoundRaterInterceptKey, np.double),
+prescoringRaterModelOutputTSVColumnsAndTypes = (
+  [
+    (raterParticipantIdKey, object),
+    (internalRaterInterceptKey, np.double),
+    (internalRaterFactor1Key, np.double),
+  ]
+  + [(rater_factor_key(i), np.double) for i in range(2, defaultNumFactors + 1)]  # SIGreg multi-factor columns
+  + [
+    (internalFirstRoundRaterInterceptKey, np.double),
   (internalFirstRoundRaterFactor1Key, np.double),
   (crhCrnhRatioDifferenceKey, np.double),
   (meanNoteScoreKey, np.double),
@@ -960,7 +982,8 @@ prescoringRaterModelOutputTSVColumnsAndTypes = [
   (totalHelpfulHarassmentRatingsPenaltyKey, np.double),
   (raterAgreeRatioWithHarassmentAbusePenaltyKey, np.double),
   (quasiCliqueValueKey, pd.Int64Dtype()),
-]
+  ]
+)
 
 prescoringRaterModelOutputTSVColumns = [
   col for (col, dtype) in prescoringRaterModelOutputTSVColumnsAndTypes
@@ -969,11 +992,15 @@ prescoringRaterModelOutputTSVTypeMapping = {
   col: dtype for (col, dtype) in prescoringRaterModelOutputTSVColumnsAndTypes
 }
 
-raterModelOutputTSVColumnsAndTypes = [
-  (raterParticipantIdKey, np.int64),
-  (coreRaterInterceptKey, np.double),
-  (coreRaterFactor1Key, np.double),
-  (crhCrnhRatioDifferenceKey, np.double),
+raterModelOutputTSVColumnsAndTypes = (
+  [
+    (raterParticipantIdKey, np.int64),
+    (coreRaterInterceptKey, np.double),
+    (coreRaterFactor1Key, np.double),
+  ]
+  + [(rater_factor_key(i), np.double) for i in range(2, defaultNumFactors + 1)]  # SIGreg multi-factor columns
+  + [
+    (crhCrnhRatioDifferenceKey, np.double),
   (meanNoteScoreKey, np.double),
   (raterAgreeRatioKey, np.double),
   (successfulRatingHelpfulCount, pd.Int64Dtype()),
@@ -1011,7 +1038,8 @@ raterModelOutputTSVColumnsAndTypes = [
   (coreWithTopicsRaterFactor1Key, np.double),
   (coreFirstRoundRaterInterceptKey, np.double),
   (coreFirstRoundRaterFactor1Key, np.double),
-]
+  ]
+)
 raterModelOutputTSVColumns = [col for (col, dtype) in raterModelOutputTSVColumnsAndTypes]
 raterModelOutputTSVTypeMapping = {col: dtype for (col, dtype) in raterModelOutputTSVColumnsAndTypes}
 

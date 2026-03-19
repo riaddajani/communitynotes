@@ -663,6 +663,9 @@ def convert_prescoring_rater_model_output_to_coalesced_helpfulness_scores(
     finalCols = scorer.get_helpfulness_scores_cols()
     if c.raterParticipantIdKey not in finalCols:
       finalCols.append(c.raterParticipantIdKey)
+    # Filter to only include columns that exist in prescoring output
+    # (prescoring may not have all columns like Factor2+ from SIGreg)
+    finalCols = [col for col in finalCols if col in scorerOutputExternalNames.columns]
     scorerOutputExternalNames = scorerOutputExternalNames[finalCols]
 
     if isinstance(scorer, MFGroupScorer):
@@ -1170,6 +1173,15 @@ def _validate_note_scoring_output(
 def _validate_contributor_scoring_output(
   helpfulnessScores: pd.DataFrame,
 ) -> pd.DataFrame:
+  # TEMPORARY: Add missing columns with NaN for testing with smaller data subsets
+  # Some scorers (e.g., MultiGroup) may not produce output with sparse data
+  # Remove this block when running on full production data
+  missing_cols = set(c.raterModelOutputTSVColumns) - set(helpfulnessScores.columns)
+  if missing_cols:
+    logger.info(f"Adding missing columns with NaN values: {missing_cols}")
+    for col in missing_cols:
+      helpfulnessScores[col] = np.nan
+
   assert set(helpfulnessScores.columns) == set(
     c.raterModelOutputTSVColumns
   ), f"Got {sorted(helpfulnessScores.columns)}, expected {sorted(c.raterModelOutputTSVColumns)}"

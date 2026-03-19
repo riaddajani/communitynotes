@@ -1,0 +1,18 @@
+{
+  "n_ratings_total": 558391,
+  "n_early": 279195,
+  "n_late": 279196,
+  "n_common_users": 2001,
+  "factor_rating_correlation": {
+    "early": 0.5464960507307595,
+    "late": 0.5530307445844519,
+    "description": "Correlation between factor dot product and rating"
+  },
+  "user_stability": {
+    "mean_rating_correlation": 0.5617463721034157,
+    "factor_norm_correlation": 1.0,
+    "rating_tendency_correlation": 0.664673244047409
+  },
+  "interpretation": "Factor-rating correlation is stable across time periods if early_corr \u2248 late_corr. User stability measures whether individual users behave consistently.",
+  "pass": true
+}

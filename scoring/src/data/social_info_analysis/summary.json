@@ -1,0 +1,11 @@
+{
+  "total_crh_notes": 30233,
+  "notes_with_social_signal": 21241,
+  "humor_candidates": 323,
+  "info_score_mean": 4.899920616544835,
+  "info_score_median": 3.5,
+  "social_score_mean": 1.8354116362914696,
+  "social_score_median": 2.0,
+  "has_url_pct": 0.9394701154367744,
+  "has_citation_pct": 0.07753117454437204
+}

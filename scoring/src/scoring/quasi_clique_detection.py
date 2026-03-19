@@ -57,20 +57,20 @@ class QuasiCliqueDetection:
   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Return counts of how many times raters rate notes in the same way, and all ratings for raters who do so >5 times."""
     # Identify ratings that are in scope
-    logger.info("initial rating length:", len(ratings))
+    logger.info(f"initial rating length: {len(ratings)}")
     ratings = ratings[[c.noteIdKey, c.raterParticipantIdKey, c.helpfulNumKey]]
     ratings = ratings.merge(
       notes[[c.noteIdKey, c.tweetIdKey, c.classificationKey, c.createdAtMillisKey]].rename(
         columns={c.createdAtMillisKey: "noteMillis"}
       )
     )
-    logger.info("ratings after merges:", len(ratings))
+    logger.info(f"ratings after merges: {len(ratings)}")
     ratings = ratings[ratings["noteMillis"] > (ratings["noteMillis"].max() - cutoff)]
-    logger.info("recent ratings:", len(ratings))
+    logger.info(f"recent ratings: {len(ratings)}")
     ratings = ratings[ratings[c.tweetIdKey] != "-1"]
-    logger.info("ratings on non-deleted tweets:", len(ratings))
+    logger.info(f"ratings on non-deleted tweets: {len(ratings)}")
     ratings = ratings[ratings[c.classificationKey] == c.notesSaysTweetIsMisleadingKey]
-    logger.info("ratings on misleading posts:", len(ratings))
+    logger.info(f"ratings on misleading posts: {len(ratings)}")
     # Identify pairs
     ratings = ratings[[c.tweetIdKey, c.noteIdKey, c.helpfulNumKey, c.raterParticipantIdKey]]
     noteCollisions = (
@@ -103,13 +103,26 @@ class QuasiCliqueDetection:
               raterPairCounts[pair] = 0
             raterPairCounts[pair] += 1
     # Return dataframes
-    left, right, count = zip(
-      *[
-        (leftRater, rightRater, count)
-        for ((leftRater, rightRater), count) in raterPairCounts.items()
-        if count >= minAlignedRatings
-      ]
-    )
+    qualified_pairs = [
+      (leftRater, rightRater, count)
+      for ((leftRater, rightRater), count) in raterPairCounts.items()
+      if count >= minAlignedRatings
+    ]
+
+    # TODO: TEMPORARY FIX for testing with small data samples (e.g., 1% sampling)
+    # This allows quasi-clique detection to gracefully handle sparse data
+    # Remove this block when running on full production data
+    # Handle case where no pairs meet the threshold
+    if not qualified_pairs:
+      logger.info(f"No rater pairs found with at least {minAlignedRatings} aligned ratings")
+      # Return empty dataframes with the expected structure
+      counts = pd.DataFrame({"left": [], "right": [], "count": []})
+      # Return empty ratings DataFrame with same columns as input
+      ratings = ratings.iloc[0:0]  # Empty DataFrame with same columns
+      logger.info(f"ratings after filter to raters included in pair counts: {len(ratings)}")
+      return counts, ratings
+
+    left, right, count = zip(*qualified_pairs)
     counts = pd.DataFrame({"left": left, "right": right, "count": count})
     ratings = ratings.merge(pd.DataFrame({c.raterParticipantIdKey: list(set(left + right))}))
     logger.info(f"ratings after filter to raters included in pair counts: {len(ratings)}")
@@ -262,6 +275,17 @@ class QuasiCliqueDetection:
       for rater in raters:
         cliqueIds.append((i + 1))  # To align with PSS, by convention clique IDs begin at 1
         raterIds.append(rater)
+
+    # TODO: TEMPORARY FIX for testing with small data samples
+    # Ensure correct dtypes for empty DataFrames (sparse data may produce no cliques)
+    # Remove this block when running on full production data
+    if len(raterIds) == 0:
+      # Create empty DataFrame with correct dtypes to avoid merge errors
+      return pd.DataFrame({
+        c.raterParticipantIdKey: pd.Series([], dtype=object),
+        c.quasiCliqueValueKey: pd.Series([], dtype='int64'),
+      })
+
     return pd.DataFrame(
       {
         c.raterParticipantIdKey: raterIds,

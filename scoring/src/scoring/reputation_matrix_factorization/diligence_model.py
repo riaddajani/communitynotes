@@ -154,6 +154,27 @@ def fit_low_diligence_model_prescoring(
   raterInitStateDiligence: Optional[pd.DataFrame] = None,
   device=torch.device("cpu"),
 ) -> Tuple[pd.DataFrame, pd.DataFrame, c.ReputationGlobalIntercept]:
+  # Handle empty ratings case - return empty DataFrames
+  if len(filteredRatings) == 0:
+    logger.warning("No ratings provided to fit_low_diligence_model_prescoring, returning empty results")
+    noteStats = pd.DataFrame({
+      c.noteIdKey: pd.Series([], dtype='int64'),
+      c.lowDiligenceNoteInterceptKey: pd.Series([], dtype='float64'),
+      c.lowDiligenceNoteFactor1Key: pd.Series([], dtype='float64'),
+      c.lowDiligenceNoteInterceptRound2Key: pd.Series([], dtype='float64'),
+    })
+    raterStats = pd.DataFrame({
+      c.raterParticipantIdKey: pd.Series([], dtype='int64'),
+      c.lowDiligenceRaterInterceptKey: pd.Series([], dtype='float64'),
+      c.lowDiligenceRaterReputationKey: pd.Series([], dtype='float64'),
+      c.lowDiligenceRaterFactor1Key: pd.Series([], dtype='float64'),
+      c.lowDiligenceRaterInterceptRound2Key: pd.Series([], dtype='float64'),
+    })
+    globalIntercept = c.ReputationGlobalIntercept(
+      firstRound=0.0, secondRound=0.0, thirdRound=0.0, finalRound=0.0
+    )
+    return noteStats, raterStats, globalIntercept
+
   dataset, hParams = _setup_dataset_and_hparams(filteredRatings, device)
   noteInitStateInternal, raterInitStateInternal = _prepare_diligence_init_state(
     noteInitStateDiligence, raterInitStateDiligence

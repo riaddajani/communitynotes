@@ -95,13 +95,25 @@ class ReputationScorer(Scorer):
     """Returns a list of columns which should be present in the auxiliaryNoteInfo output."""
     return []
 
+  def _get_num_factors(self) -> int:
+    """Returns the number of factors used in matrix factorization output.
+
+    ReputationScorer only outputs Factor1 in its results, regardless of
+    what the underlying MatrixFactorization might use internally.
+    """
+    return 1
+
   def _get_dropped_note_cols(self) -> List[str]:
     """Returns a list of columns which should be excluded from scoredNotes and auxiliaryNoteInfo."""
-    return []
+    # Drop extra note factor columns (Factor2+) since this scorer only outputs Factor1
+    extra_note_factors = [c.note_factor_key(i) for i in range(2, self._get_num_factors() + 1)]
+    return extra_note_factors
 
   def _get_dropped_user_cols(self) -> List[str]:
     """Returns a list of columns which should be excluded from helpfulnessScores output."""
-    return []
+    # Drop extra factor columns (Factor2+) since this scorer only outputs Factor1
+    extra_factors = [c.rater_factor_key(i) for i in range(2, self._get_num_factors() + 1)]
+    return extra_factors
 
   def _get_user_col_mapping(self) -> Dict[str, str]:
     """Returns a dict mapping default user column names to custom names for a specific model."""

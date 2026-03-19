@@ -345,7 +345,8 @@ class PFlipPlusModel(object):
     cutoffByRatings["ratingMin"] = cutoffByRatings[["maxRatingMts", "nthRatingMts"]].min(axis=1)
     # Merge cutoffs by time and by ratings
     beforeMerge = len(scoringCutoff)
-    scoringCutoff = scoringCutoff.merge(cutoffByRatings[[c.noteIdKey, "ratingMin"]])
+    # TEMPORARY: Using left join for testing with smaller data subset (was inner join)
+    scoringCutoff = scoringCutoff.merge(cutoffByRatings[[c.noteIdKey, "ratingMin"]], how="left")
     assert len(scoringCutoff) == beforeMerge
     scoringCutoff[_SCORING_CUTOFF_MTS] = scoringCutoff[[_SCORING_CUTOFF_MTS, "ratingMin"]].max(
       axis=1

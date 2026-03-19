@@ -43,7 +43,7 @@ class MFCoreScorer(MFBaseScorer):
 
   def _get_note_col_mapping(self) -> Dict[str, str]:
     """Returns a dict mapping default note column names to custom names for a specific model."""
-    return {
+    mapping = {
       c.internalNoteInterceptKey: c.coreNoteInterceptKey,
       c.internalNoteFactor1Key: c.coreNoteFactor1Key,
       c.internalRatingStatusKey: c.coreRatingStatusKey,
@@ -58,22 +58,35 @@ class MFCoreScorer(MFBaseScorer):
       c.negFactorPopulationSampledRatingCountKey: c.coreNegFactorPopulationSampledRatingCountKey,
       c.posFactorPopulationSampledRatingCountKey: c.corePosFactorPopulationSampledRatingCountKey,
     }
+    # Add dynamic mappings for Factor2+ (keep internal names for analysis)
+    for i in range(2, self._get_num_factors() + 1):
+      mapping[c.note_factor_key(i)] = c.note_factor_key(i)
+    return mapping
 
   def _get_user_col_mapping(self) -> Dict[str, str]:
     """Returns a dict mapping default user column names to custom names for a specific model."""
-    return {
+    mapping = {
       c.internalRaterInterceptKey: c.coreRaterInterceptKey,
       c.internalRaterFactor1Key: c.coreRaterFactor1Key,
       c.internalFirstRoundRaterInterceptKey: c.coreFirstRoundRaterInterceptKey,
       c.internalFirstRoundRaterFactor1Key: c.coreFirstRoundRaterFactor1Key,
     }
+    # Add dynamic mappings for Factor2+ (keep internal names for analysis)
+    for i in range(2, self._get_num_factors() + 1):
+      mapping[c.rater_factor_key(i)] = c.rater_factor_key(i)
+    return mapping
 
   def get_scored_notes_cols(self) -> List[str]:
     """Returns a list of columns which should be present in the scoredNotes output."""
-    return [
+    cols = [
       c.noteIdKey,
       c.coreNoteInterceptKey,
       c.coreNoteFactor1Key,
+    ]
+    # Add Factor2+ columns dynamically for SIGreg analysis
+    for i in range(2, self._get_num_factors() + 1):
+      cols.append(c.note_factor_key(i))
+    cols.extend([
       c.coreRatingStatusKey,
       c.coreActiveRulesKey,
       c.activeFilterTagsKey,
@@ -83,21 +96,28 @@ class MFCoreScorer(MFBaseScorer):
       c.coreNoteInterceptNoHighVolKey,
       c.coreNoteInterceptNoCorrelatedKey,
       c.coreNoteInterceptPopulationSampledKey,
-    ]
+    ])
+    return cols
 
   def get_helpfulness_scores_cols(self) -> List[str]:
     """Returns a list of columns which should be present in the helpfulnessScores output."""
-    return [
+    cols = [
       c.raterParticipantIdKey,
       c.coreRaterInterceptKey,
       c.coreRaterFactor1Key,
+    ]
+    # Add Factor2+ columns dynamically for SIGreg analysis
+    for i in range(2, self._get_num_factors() + 1):
+      cols.append(c.rater_factor_key(i))
+    cols.extend([
       c.crhCrnhRatioDifferenceKey,
       c.meanNoteScoreKey,
       c.raterAgreeRatioKey,
       c.aboveHelpfulnessThresholdKey,
       c.coreFirstRoundRaterInterceptKey,
       c.coreFirstRoundRaterFactor1Key,
-    ]
+    ])
+    return cols
 
   def get_auxiliary_note_info_cols(self) -> List[str]:
     base = super().get_auxiliary_note_info_cols()
